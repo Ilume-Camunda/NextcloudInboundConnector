@@ -32,7 +32,7 @@ public class MyConnectorIntegrationTest {
   private InboundConnectorContext context;
 
   private MyConnectorExecutable connector;
-  private int port; // assigned fresh for every test
+  private int port;
 
   @BeforeEach
   void setUp() throws Exception {
@@ -40,8 +40,6 @@ public class MyConnectorIntegrationTest {
     connector = new MyConnectorExecutable();
     when(context.bindProperties(MyConnectorProperties.class))
             .thenReturn(new MyConnectorProperties(port, WEBHOOK_PATH));
-    // correlate() returns null by default from Mockito — that's fine,
-    // handleResult() uses a switch that simply won't match null and does nothing.
     connector.activate(context);
   }
 
@@ -133,7 +131,7 @@ public class MyConnectorIntegrationTest {
             .statusCode();
   }
 
-  /** Asks the OS for a free port by binding to port 0, then immediately releasing it. */
+  // Asks the OS for a free port by binding to port 0, then immediately releasing it.
   private static int findFreePort() throws Exception {
     try (var socket = new ServerSocket(0)) {
       return socket.getLocalPort();

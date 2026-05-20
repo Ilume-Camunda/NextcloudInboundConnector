@@ -56,10 +56,6 @@ public class NextcloudWebhookServer {
 
         server.start();
         LOG.info("Webhook server started on port {} at path {}", port, webhookPath);
-
-        /*var bodyBytes = exchange.getRequestBody().readAllBytes();
-        LOG.info("Raw body: {}", new String(bodyBytes, StandardCharsets.UTF_8));
-        var event = MAPPER.readValue(bodyBytes, NextcloudFileEvent.class);*/
     }
 
     public void stop() {

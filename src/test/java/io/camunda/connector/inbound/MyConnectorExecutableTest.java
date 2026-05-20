@@ -15,7 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class MyConnectorExecutableTest {
 
-  @Mock private InboundConnectorContext context;
+  /*@Mock private InboundConnectorContext context;
 
   private MyConnectorExecutable connector;
 
@@ -33,7 +33,7 @@ class MyConnectorExecutableTest {
         // Ignore exceptions during teardown
       }
     }
-  }
+  }*/
 
   /*@Test
   void shouldBindPropertiesOnActivate() {

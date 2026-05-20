@@ -1,6 +1,9 @@
 package io.camunda.connector.inbound;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,7 +21,7 @@ import org.slf4j.LoggerFactory;
         name = "Nextcloud File Connector",
         version = 1,
         description = "Receives file events from Nextcloud via webhook",
-        icon = "icon.svg",
+        icon = "ilume_logo.svg",
         documentationRef = "https://docs.camunda.io/docs/components/connectors/out-of-the-box-connectors/available-connectors-overview/",
         propertyGroups = {
                 @ElementTemplate.PropertyGroup(id = "properties", label = "Properties"),
@@ -28,11 +31,11 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
 
   private static final Logger LOG = LoggerFactory.getLogger(MyConnectorExecutable.class);
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final String DIRECTORY_MIME_TYPE = "httpd/unix-directory";
 
-  // The running HTTP server that listens for incoming Nextcloud webhooks
   private NextcloudWebhookServer webhookServer;
   private InboundConnectorContext context;
-  private String correlationKeyField;
+  private List<String> pathWhitelist;
 
   /**
    * When a BPMN diagram containing an inbound connector element
@@ -60,39 +63,45 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
   @Override
   public void activate(InboundConnectorContext connectorContext) throws Exception {
     this.context = connectorContext;
+    this.pathWhitelist = parseWhitelist(readWhitelistFromProperties());
     var props = connectorContext.bindProperties(MyConnectorProperties.class);
 
     // Start the webhook HTTP server on the configured port and path.
-    // The method reference this::onEvent is passed as a callback - it will be
-    // called each time Nextcloud POSTs a webhook to the server.
     webhookServer = new NextcloudWebhookServer(
             props.webhookPort(),
             props.webhookPath(),
             this::onEvent
     );
-    LOG.info("Nextcloud connector activated on port {}{}", props.webhookPort(), props.webhookPath());
+    LOG.info("Nextcloud connector activated on port {}{} | whitelist: {}",
+            props.webhookPort(), props.webhookPath(),
+            pathWhitelist.isEmpty() ? "ALL PATHS ALLOWED" : pathWhitelist);
   }
 
+  private static String readWhitelistFromProperties() {
+    try (var input = MyConnectorExecutable.class
+            .getClassLoader()
+            .getResourceAsStream("application.properties")) {
+      if (input == null) return "";
+      var props = new java.util.Properties();
+      props.load(input);
+      return props.getProperty("nextcloud.path.whitelist", "");
+    } catch (Exception e) {
+      return "";
+    }
+  }
 
   // Called by NextcloudWebhookServer each time a valid webhook POST is received.
   private void onEvent(NextcloudFileEvent rawEvent) {
-    // Convert to Map so FEEL can access fields directly as top-level variables
-    // e.g. node.internalPath, eventType, workflowFile.url
 
-    LOG.info("Raw event received - node: {}, internalPath: {}",
-            rawEvent.node(),
-            rawEvent.node() != null ? rawEvent.node().internalPath() : "NODE IS NULL");
-    LOG.info("eventType: {}", rawEvent.eventType());
-    LOG.info("eventName: {}", rawEvent.eventName());
-    LOG.info("node null? {}", rawEvent.node() == null);
-    LOG.info("internalPath: {}", rawEvent.node() != null ? rawEvent.node().internalPath() : "NULL");
+    if (!isEventAllowed(rawEvent)) {
+      return; // reason already logged inside isEventAllowed
+    }
 
     // Convert the typed NextcloudFileEvent record into a flat Map<String, Object>.
     // This is necessary because Camunda's FEEL engine evaluates expressions like
     // "node.internalPath" or "eventType" against a generic variable map, not typed Java objects.
     var variables = MAPPER.convertValue(rawEvent, new TypeReference<Map<String, Object>>() {});
     LOG.info("Variables map: {}", variables);
-
 
     // Wrap the variables in a CorrelationRequest and pass it to Camunda.
     // Camunda will then:
@@ -103,9 +112,59 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
     var correlationRequest = CorrelationRequest.builder()
             .variables(variables)
             .build();
-
     var result = context.correlate(correlationRequest);
     handleResult(result);
+  }
+
+  /**
+   * Returns true only if the event passes both guards:
+   *
+   *   1. Not a directory — events with mimeType "httpd/unix-directory" are folder
+   *      operations (create/rename/delete) and should never trigger the process.
+   *
+   *   2. Path whitelist — if NEXTCLOUD_PATH_WHITELIST is set, the event's node.path
+   *      must contain at least one of the listed substrings. If the env var is absent
+   *      or blank, all paths are allowed.
+   */
+  private boolean isEventAllowed(NextcloudFileEvent event) {
+
+    if (event.node() != null && DIRECTORY_MIME_TYPE.equals(event.node().mimeType())) {
+      LOG.info("Event skipped - node is a directory (mimeType={}), path: {}",
+              DIRECTORY_MIME_TYPE, event.node().path());
+      return false;
+    }
+
+    if (pathWhitelist.isEmpty()) {
+      return true; // no whitelist configured → allow all
+    }
+    if (event.node() == null || event.node().path() == null) {
+      LOG.warn("Event blocked - no node path to check against whitelist");
+      return false;
+    }
+    String nodePath = event.node().path();
+    boolean allowed = pathWhitelist.stream().anyMatch(nodePath::contains);
+    if (allowed) {
+      LOG.debug("Event allowed - path '{}' matched whitelist {}", nodePath, pathWhitelist);
+    } else {
+      LOG.info("Event blocked - path '{}' not in whitelist {}", nodePath, pathWhitelist);
+    }
+    return allowed;
+  }
+
+  /**
+   * Parses the comma-separated env var value into a trimmed, non-empty list.
+   * Returns an empty list if the input is null or blank (= allow all).
+   *
+   * Example env var value: "/invoices,/contracts,/hr"
+   */
+  private static List<String> parseWhitelist(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return List.of();
+    }
+    return Arrays.stream(raw.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
   }
 
   // Handles the result returned by Camunda after attempting correlation.
@@ -119,8 +178,7 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
           case CorrelationFailureHandlingStrategy.ForwardErrorToUpstream ignored -> {
             if (failure.message() != null &&
                     failure.message().contains("ALREADY_EXISTS")) {
-              LOG.debug("Duplicate event suppressed (node.id {} already processed)",
-                      "241"); // or extract from message
+              LOG.debug("Duplicate event suppressed (node.id {} already processed)", "241");
             } else {
               LOG.error("Correlation failed: {}", failure.message());
             }

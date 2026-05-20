@@ -89,6 +89,12 @@
             <version>${version.connectors}</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <version>4.0.5</version>
+        </dependency>
+
     </dependencies>
 
     <build>

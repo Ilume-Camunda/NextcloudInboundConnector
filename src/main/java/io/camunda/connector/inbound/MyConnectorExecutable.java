@@ -126,10 +126,10 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
    *      must contain at least one of the listed substrings. If the env var is absent
    *      or blank, all paths are allowed.
    */
-  private boolean isEventAllowed(NextcloudFileEvent event) {
+  boolean isEventAllowed(NextcloudFileEvent event) {
 
     if (event.node() != null && DIRECTORY_MIME_TYPE.equals(event.node().mimeType())) {
-      LOG.info("Event skipped - node is a directory (mimeType={}), path: {}",
+      LOG.debug("Event skipped - node is a directory (mimeType={}), path: {}",
               DIRECTORY_MIME_TYPE, event.node().path());
       return false;
     }
@@ -146,7 +146,7 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
     if (allowed) {
       LOG.debug("Event allowed - path '{}' matched whitelist {}", nodePath, pathWhitelist);
     } else {
-      LOG.info("Event blocked - path '{}' not in whitelist {}", nodePath, pathWhitelist);
+      LOG.debug("Event blocked - path '{}' not in whitelist {}", nodePath, pathWhitelist);
     }
     return allowed;
   }
@@ -157,7 +157,7 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
    *
    * Example env var value: "/invoices,/contracts,/hr"
    */
-  private static List<String> parseWhitelist(String raw) {
+  static List<String> parseWhitelist(String raw) {
     if (raw == null || raw.isBlank()) {
       return List.of();
     }
@@ -166,6 +166,8 @@ public class MyConnectorExecutable implements InboundConnectorExecutable<Inbound
             .filter(s -> !s.isEmpty())
             .toList();
   }
+
+  void setPathWhitelist(List<String> whitelist) { this.pathWhitelist = whitelist; }
 
   // Handles the result returned by Camunda after attempting correlation.
   private void handleResult(CorrelationResult result) {

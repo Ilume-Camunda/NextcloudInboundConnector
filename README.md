@@ -13,7 +13,7 @@ Currently, the connector is designed to respond to Nextcloud requests sent when 
 - [Nextcloud](#nextcloud)
 - [Connector Structure](#connector-structure)
 - [Build](#build)
-- [Running the Connector](#element-template)
+- [Element Template](#element-template)
 
 ## Prerequisites
 - A working Nextcloud environment.

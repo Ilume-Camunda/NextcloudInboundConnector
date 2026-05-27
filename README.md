@@ -6,7 +6,7 @@ Using Nextcloud’s Webhook app, you can respond to actions such as file and fol
 
 This allows for the use of a simple control instance that determines which requests are permitted. Additionally, you can specify how information regarding document-based workflows in Nextcloud should be displayed and processed, whether for archiving, document routing, reporting, or file synchronization. The connector is suitable for both SaaS and self-managed environments and supports modern security and deployment standards.
 
-Currently, the connector is designed to respond to Nextcloud requests sent when managing files within specific folders.
+Currently, the connector is designed to respond to Nextcloud requests sent when managing files within specific folders and can be used as both an intermediate catch event and a start event that starts new process instances.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -35,7 +35,7 @@ Once this is done, a new entry will open where you can configure the webhook set
 Once this is configured, Nextcloud can respond to changes within the environment.
 
 ## Connector Structure
-The connector template contains two major areas that are essential for its functionality:
+The connector template contains three major areas that are essential for its functionality:
 
 - Properties
 - Correlation
@@ -48,7 +48,7 @@ For the connector to be able to listen to a specific endpoint you have to set th
 The correlation settings ensure that the POST requests sent by Nextcloud do not trigger every single process instance currently running in your Camunda environment. This is achieved using two correlation keys, which are compared when the connector receives a request from Nextcloud. To do this, both keys must be created: one within the Camunda process and one within Nextcloud. For example, using Camunda’s native “uuid()” method in a task allows you to automatically create a key as a process variable. To do this in Nextcloud, it is advisable to create a folder whose name consists of the key. This can be done either manually, through custom created logic on your end or by using the Ilume Nextcloud Outbound Connector, which can generate a new folder with the UUID as its name.
 
 ### Whitelist
-The connector uses a whitelist that can be configured in the project's “application.properties” file. It contains keywords that must be included in the path of the uploaded file in Nextcloud. If none of the keywords are present, the request is rejected.
+The connector uses a whitelist to control what kind of requests will be accepted. It uses keywords that must be included in the path of the uploaded file in Nextcloud. If none of the keywords are present, the request is rejected.
 
 ## Build
 
